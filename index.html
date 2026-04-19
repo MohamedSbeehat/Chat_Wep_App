@@ -1,11 +1,541 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>الميسر للحفظ - نظام تتبع حفظ القرآن</title>
+    <!-- Google Fonts: Arabic & English -->
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- React & ReactDOM & Babel -->
+    <script src="https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.development.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.development.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@babel/standalone/babel.min.js"></script>
+    <!-- Framer Motion via ESM not CDN easily, we use CSS transitions for animations, plus custom -->
+    <style>
+        * {
+            transition: all 0.2s ease;
+        }
+        body {
+            font-family: 'Cairo', 'Inter', sans-serif;
+            background: linear-gradient(135deg, #f0f4ff 0%, #e9eefa 100%);
+            min-height: 100vh;
+        }
+        /* custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #e2e8f0;
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #8b5cf6;
+            border-radius: 10px;
+        }
+        /* glassmorphism card */
+        .glass-card {
+            background: rgba(255, 255, 255, 0.75);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255,255,255,0.5);
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.15);
+        }
+        .glow-hover:hover {
+            box-shadow: 0 0 15px rgba(139, 92, 246, 0.6);
+            transform: translateY(-3px);
+        }
+        .animated-gradient {
+            background: linear-gradient(270deg, #8b5cf6, #d946ef, #f59e0b);
+            background-size: 200% 200%;
+            animation: gradientShift 3s ease infinite;
+        }
+        @keyframes gradientShift {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+        .btn-ripple {
+            position: relative;
+            overflow: hidden;
+            transform: scale(1);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .btn-ripple:active {
+            transform: scale(0.97);
+        }
+        .custom-dropdown {
+            position: relative;
+        }
+        .dropdown-options {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: white;
+            backdrop-filter: blur(8px);
+            border-radius: 1rem;
+            max-height: 0;
+            opacity: 0;
+            overflow-y: auto;
+            z-index: 50;
+            transition: max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease;
+            box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1);
+            border: 1px solid #eef2ff;
+        }
+        .dropdown-options.open {
+            max-height: 240px;
+            opacity: 1;
+        }
+        .fade-enter {
+            opacity: 0;
+            transform: translateY(20px);
+        }
+        .fade-enter-active {
+            opacity: 1;
+            transform: translateY(0);
+            transition: all 0.4s;
+        }
+        .modal-backdrop {
+            background: rgba(0,0,0,0.4);
+            backdrop-filter: blur(5px);
+            animation: fadeIn 0.2s;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        .card-slide {
+            animation: slideUp 0.4s ease-out;
+        }
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        input, textarea, select {
+            transition: all 0.2s;
+        }
+        input:focus, textarea:focus {
+            transform: scale(1.01);
+            border-color: #8b5cf6;
+            box-shadow: 0 0 0 3px rgba(139,92,246,0.2);
+        }
+        .floating-label {
+            transition: all 0.2s;
+        }
+        .rtl-support {
+            direction: rtl;
+        }
+        .ltr-support {
+            direction: ltr;
+        }
+    </style>
 </head>
-<body>
-    <!--MS is The best -->>
+<body class="font-sans antialiased">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        // ------------------- DATA HELPERS -------------------
+        const STORAGE_KEY = "hifz_students_data";
+
+        // Default demo data
+        const getDefaultData = () => ({
+            "أحمد محمد": {
+                name: "أحمد محمد",
+                records: [
+                    { id: "rec1", fromJuz: 1, fromSurah: 1, fromPage: 1, fromAyah: 1, toJuz: 2, toSurah: 2, toPage: 30, toAyah: 50, mistakes: "مد لازم", recommendations: "مراجعة يومية", score: 8, date: "2025-02-15" },
+                    { id: "rec2", fromJuz: 3, fromSurah: 3, fromPage: 45, fromAyah: 10, toJuz: 4, toSurah: 4, toPage: 70, toAyah: 25, mistakes: "تفخيم وترقيق", recommendations: "تكرار التلاوة", score: 7, date: "2025-02-20" }
+                ]
+            },
+            "فاطمة الزهراء": {
+                name: "فاطمة الزهراء",
+                records: [
+                    { id: "rec3", fromJuz: 10, fromSurah: 10, fromPage: 190, fromAyah: 1, toJuz: 11, toSurah: 11, toPage: 220, toAyah: 30, mistakes: "نطق الحروف", recommendations: "الاستماع للقراء", score: 9, date: "2025-02-18" }
+                ]
+            }
+        });
+
+        const loadData = () => {
+            const stored = localStorage.getItem(STORAGE_KEY);
+            if (stored) return JSON.parse(stored);
+            const defaultData = getDefaultData();
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(defaultData));
+            return defaultData;
+        };
+
+        const saveData = (data) => localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+
+        // Helper: generate unique id
+        const generateId = () => Date.now() + '-' + Math.random().toString(36).substr(2, 6);
+
+        // Translations
+        const translations = {
+            ar: {
+                appName: "الميسر للحفظ",
+                searchPlaceholder: "🔍 ابحث عن طالب...",
+                addStudent: "+ طالب جديد",
+                addRecordBtn: "➕ إضافة جلسة جديدة",
+                noRecords: "📭 لا توجد جلسات حفظ بعد",
+                studentRecords: "جلسات الحفظ",
+                evaluation: "التقييم",
+                mistakesLabel: "مواطن الضعف / الأخطاء",
+                recommendationsLabel: "توصيات وملاحظات",
+                score: "الدرجة (0-10)",
+                date: "التاريخ",
+                from: "من",
+                to: "إلى",
+                juz: "جزء",
+                surah: "سورة",
+                page: "صفحة",
+                ayah: "آية",
+                step1: "الاسم",
+                step2: "التقدم",
+                step3: "الأخطاء",
+                step4: "التوصيات",
+                step5: "التقييم",
+                step6: "التاريخ",
+                next: "التالي",
+                prev: "السابق",
+                save: "حفظ",
+                cancel: "إلغاء",
+                edit: "تعديل",
+                delete: "حذف",
+                studentName: "اسم الطالب",
+                requiredName: "الاسم مطلوب",
+                nameExists: "هذا الاسم موجود مسبقاً",
+                addNewStudentTitle: "إضافة طالب جديد",
+                addNewRecordTitle: "إضافة جلسة حفظ",
+                editRecordTitle: "تعديل الجلسة",
+                confirmDelete: "هل أنت متأكد من حذف هذه الجلسة؟",
+                searchResults: "نتائج البحث",
+                selectStudent: "اختر طالباً لعرض تفاصيله"
+            },
+            en: {
+                appName: "Al-Muyassar lil Hifz",
+                searchPlaceholder: "🔍 Search student...",
+                addStudent: "+ New Student",
+                addRecordBtn: "➕ Add New Session",
+                noRecords: "📭 No memorization sessions yet",
+                studentRecords: "Memorization Sessions",
+                evaluation: "Evaluation",
+                mistakesLabel: "Mistakes / Weakness Points",
+                recommendationsLabel: "Recommendations / Notes",
+                score: "Score (0-10)",
+                date: "Date",
+                from: "From",
+                to: "To",
+                juz: "Juz",
+                surah: "Surah",
+                page: "Page",
+                ayah: "Ayah",
+                step1: "Name",
+                step2: "Progress",
+                step3: "Mistakes",
+                step4: "Recommendations",
+                step5: "Score",
+                step6: "Date",
+                next: "Next",
+                prev: "Previous",
+                save: "Save",
+                cancel: "Cancel",
+                edit: "Edit",
+                delete: "Delete",
+                studentName: "Student Name",
+                requiredName: "Name is required",
+                nameExists: "This name already exists",
+                addNewStudentTitle: "Add New Student",
+                addNewRecordTitle: "Add Memorization Session",
+                editRecordTitle: "Edit Session",
+                confirmDelete: "Are you sure you want to delete this session?",
+                searchResults: "Search Results",
+                selectStudent: "Select a student to view details"
+            }
+        };
+
+        // Dropdown options
+        const juzOptions = Array.from({ length: 30 }, (_, i) => ({ value: i+1, label: `${i+1}` }));
+        const surahOptions = Array.from({ length: 114 }, (_, i) => ({ value: i+1, label: `${i+1}` }));
+        const pageOptions = Array.from({ length: 604 }, (_, i) => ({ value: i+1, label: `${i+1}` }));
+        const ayahOptions = Array.from({ length: 300 }, (_, i) => ({ value: i+1, label: `${i+1}` }));
+
+        // Custom Animated Dropdown Component
+        const AnimatedDropdown = ({ value, onChange, options, placeholder, label }) => {
+            const [open, setOpen] = React.useState(false);
+            const ref = React.useRef();
+            React.useEffect(() => {
+                const handleClickOutside = (e) => {
+                    if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+                };
+                document.addEventListener("mousedown", handleClickOutside);
+                return () => document.removeEventListener("mousedown", handleClickOutside);
+            }, []);
+            const selectedLabel = options.find(opt => opt.value === value)?.label || placeholder;
+            return (
+                <div className="custom-dropdown w-full" ref={ref}>
+                    <div 
+                        onClick={() => setOpen(!open)}
+                        className="w-full bg-white/80 backdrop-blur-sm border border-purple-200 rounded-2xl px-4 py-2 cursor-pointer flex justify-between items-center hover:border-purple-400 transition-all shadow-sm"
+                    >
+                        <span className={value ? "text-gray-800" : "text-gray-400"}>{selectedLabel}</span>
+                        <svg className={`w-4 h-4 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                    </div>
+                    <div className={`dropdown-options ${open ? 'open' : ''}`}>
+                        {options.map(opt => (
+                            <div key={opt.value} onClick={() => { onChange(opt.value); setOpen(false); }} className="px-4 py-2 hover:bg-purple-100 cursor-pointer transition-all">{opt.label}</div>
+                        ))}
+                    </div>
+                </div>
+            );
+        };
+
+        // Wizard Step Form (Progress fields)
+        const ProgressFields = ({ data, setData, t, dir }) => {
+            const update = (field, val) => setData({...data, [field]: val});
+            return (
+                <div className="space-y-6">
+                    <div className="grid md:grid-cols-2 gap-6">
+                        <div className="bg-gradient-to-br from-indigo-50/50 to-purple-50/50 p-4 rounded-2xl">
+                            <h4 className="font-bold text-purple-800 mb-3">{t.from}</h4>
+                            <div className="space-y-3">
+                                <div><label className="text-sm font-semibold">{t.juz}</label><AnimatedDropdown value={data.fromJuz} onChange={(v)=>update('fromJuz',v)} options={juzOptions} placeholder={t.juz} /></div>
+                                <div><label className="text-sm font-semibold">{t.surah}</label><AnimatedDropdown value={data.fromSurah} onChange={(v)=>update('fromSurah',v)} options={surahOptions} placeholder={t.surah} /></div>
+                                <div><label className="text-sm font-semibold">{t.page}</label><AnimatedDropdown value={data.fromPage} onChange={(v)=>update('fromPage',v)} options={pageOptions} placeholder={t.page} /></div>
+                                <div><label className="text-sm font-semibold">{t.ayah}</label><AnimatedDropdown value={data.fromAyah} onChange={(v)=>update('fromAyah',v)} options={ayahOptions} placeholder={t.ayah} /></div>
+                            </div>
+                        </div>
+                        <div className="bg-gradient-to-br from-indigo-50/50 to-purple-50/50 p-4 rounded-2xl">
+                            <h4 className="font-bold text-purple-800 mb-3">{t.to}</h4>
+                            <div className="space-y-3">
+                                <div><label className="text-sm font-semibold">{t.juz}</label><AnimatedDropdown value={data.toJuz} onChange={(v)=>update('toJuz',v)} options={juzOptions} placeholder={t.juz} /></div>
+                                <div><label className="text-sm font-semibold">{t.surah}</label><AnimatedDropdown value={data.toSurah} onChange={(v)=>update('toSurah',v)} options={surahOptions} placeholder={t.surah} /></div>
+                                <div><label className="text-sm font-semibold">{t.page}</label><AnimatedDropdown value={data.toPage} onChange={(v)=>update('toPage',v)} options={pageOptions} placeholder={t.page} /></div>
+                                <div><label className="text-sm font-semibold">{t.ayah}</label><AnimatedDropdown value={data.toAyah} onChange={(v)=>update('toAyah',v)} options={ayahOptions} placeholder={t.ayah} /></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // Main App
+        const App = () => {
+            const [showIntro, setShowIntro] = React.useState(true);
+            const [progressWidth, setProgressWidth] = React.useState(0);
+            const [lang, setLang] = React.useState('ar');
+            const t = translations[lang];
+            const [studentsData, setStudentsData] = React.useState({});
+            const [searchTerm, setSearchTerm] = React.useState('');
+            const [selectedStudentName, setSelectedStudentName] = React.useState(null);
+            const [showWizard, setShowWizard] = React.useState(false);
+            const [wizardMode, setWizardMode] = React.useState('new'); // 'new', 'addRecord', 'edit'
+            const [editRecordId, setEditRecordId] = React.useState(null);
+            const [currentStep, setCurrentStep] = React.useState(1);
+            const [wizardData, setWizardData] = React.useState({
+                studentName: '', fromJuz:1, fromSurah:1, fromPage:1, fromAyah:1, toJuz:1, toSurah:1, toPage:1, toAyah:1,
+                mistakes: '', recommendations: '', score: 5, date: new Date().toISOString().split('T')[0]
+            });
+            const [showModal, setShowModal] = React.useState(false);
+            const [modalContent, setModalContent] = React.useState(null);
+            
+            React.useEffect(() => {
+                const interval = setInterval(() => {
+                    setProgressWidth(prev => {
+                        if (prev >= 100) {
+                            clearInterval(interval);
+                            setTimeout(() => setShowIntro(false), 200);
+                            return 100;
+                        }
+                        return prev + 2;
+                    });
+                }, 30);
+                return () => clearInterval(interval);
+            }, []);
+
+            React.useEffect(() => {
+                const data = loadData();
+                setStudentsData(data);
+            }, []);
+
+            React.useEffect(() => {
+                if (!showIntro && Object.keys(studentsData).length > 0 && !selectedStudentName) {
+                    const first = Object.keys(studentsData)[0];
+                    if(first) setSelectedStudentName(first);
+                }
+            }, [showIntro, studentsData]);
+
+            const updateGlobalData = (newData) => {
+                setStudentsData(newData);
+                saveData(newData);
+            };
+
+            const getFilteredStudents = () => {
+                return Object.values(studentsData).filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase()));
+            };
+
+            const handleSelectStudent = (name) => {
+                setSelectedStudentName(name);
+                setSearchTerm('');
+            };
+
+            const openWizardForNewStudent = () => {
+                setWizardMode('new');
+                setWizardData({ studentName: '', fromJuz:1, fromSurah:1, fromPage:1, fromAyah:1, toJuz:1, toSurah:1, toPage:1, toAyah:1, mistakes: '', recommendations: '', score:5, date: new Date().toISOString().split('T')[0] });
+                setCurrentStep(1);
+                setShowWizard(true);
+            };
+            const openWizardForAddRecord = () => {
+                if (!selectedStudentName) return;
+                setWizardMode('addRecord');
+                setWizardData({ studentName: selectedStudentName, fromJuz:1, fromSurah:1, fromPage:1, fromAyah:1, toJuz:1, toSurah:1, toPage:1, toAyah:1, mistakes: '', recommendations: '', score:5, date: new Date().toISOString().split('T')[0] });
+                setCurrentStep(2);
+                setShowWizard(true);
+            };
+            const openEditRecord = (record) => {
+                setWizardMode('edit');
+                setEditRecordId(record.id);
+                setWizardData({
+                    studentName: selectedStudentName, fromJuz: record.fromJuz, fromSurah: record.fromSurah, fromPage: record.fromPage, fromAyah: record.fromAyah,
+                    toJuz: record.toJuz, toSurah: record.toSurah, toPage: record.toPage, toAyah: record.toAyah,
+                    mistakes: record.mistakes || '', recommendations: record.recommendations || '', score: record.score, date: record.date
+                });
+                setCurrentStep(2);
+                setShowWizard(true);
+            };
+            const deleteRecord = (recordId) => {
+                if (window.confirm(t.confirmDelete)) {
+                    const student = studentsData[selectedStudentName];
+                    const updatedRecords = student.records.filter(r => r.id !== recordId);
+                    const newData = {...studentsData, [selectedStudentName]: {...student, records: updatedRecords}};
+                    updateGlobalData(newData);
+                }
+            };
+            const saveWizard = () => {
+                if (wizardMode === 'new') {
+                    if (!wizardData.studentName.trim()) { alert(t.requiredName); return; }
+                    if (studentsData[wizardData.studentName]) { alert(t.nameExists); return; }
+                    const newRecord = { id: generateId(), fromJuz: wizardData.fromJuz, fromSurah: wizardData.fromSurah, fromPage: wizardData.fromPage, fromAyah: wizardData.fromAyah, toJuz: wizardData.toJuz, toSurah: wizardData.toSurah, toPage: wizardData.toPage, toAyah: wizardData.toAyah, mistakes: wizardData.mistakes, recommendations: wizardData.recommendations, score: wizardData.score, date: wizardData.date };
+                    const newStudent = { name: wizardData.studentName, records: [newRecord] };
+                    const newData = {...studentsData, [wizardData.studentName]: newStudent};
+                    updateGlobalData(newData);
+                    setSelectedStudentName(wizardData.studentName);
+                } 
+                else if (wizardMode === 'addRecord') {
+                    const student = studentsData[selectedStudentName];
+                    const newRecord = { id: generateId(), fromJuz: wizardData.fromJuz, fromSurah: wizardData.fromSurah, fromPage: wizardData.fromPage, fromAyah: wizardData.fromAyah, toJuz: wizardData.toJuz, toSurah: wizardData.toSurah, toPage: wizardData.toPage, toAyah: wizardData.toAyah, mistakes: wizardData.mistakes, recommendations: wizardData.recommendations, score: wizardData.score, date: wizardData.date };
+                    const updatedRecords = [...student.records, newRecord];
+                    const newData = {...studentsData, [selectedStudentName]: {...student, records: updatedRecords}};
+                    updateGlobalData(newData);
+                }
+                else if (wizardMode === 'edit') {
+                    const student = studentsData[selectedStudentName];
+                    const updatedRecords = student.records.map(rec => rec.id === editRecordId ? { ...rec, fromJuz: wizardData.fromJuz, fromSurah: wizardData.fromSurah, fromPage: wizardData.fromPage, fromAyah: wizardData.fromAyah, toJuz: wizardData.toJuz, toSurah: wizardData.toSurah, toPage: wizardData.toPage, toAyah: wizardData.toAyah, mistakes: wizardData.mistakes, recommendations: wizardData.recommendations, score: wizardData.score, date: wizardData.date } : rec);
+                    const newData = {...studentsData, [selectedStudentName]: {...student, records: updatedRecords}};
+                    updateGlobalData(newData);
+                }
+                setShowWizard(false);
+            };
+            const renderStepContent = () => {
+                switch(currentStep) {
+                    case 1: return <div><label className="block font-bold mb-2">{t.studentName}</label><input type="text" value={wizardData.studentName} onChange={(e)=>setWizardData({...wizardData, studentName: e.target.value})} className="w-full p-3 rounded-2xl border border-purple-200 focus:ring-2 focus:ring-purple-400 bg-white/70" placeholder={t.studentName} /></div>;
+                    case 2: return <ProgressFields data={wizardData} setData={setWizardData} t={t} dir={lang} />;
+                    case 3: return <div><label className="block font-bold mb-2">{t.mistakesLabel}</label><textarea rows="3" value={wizardData.mistakes} onChange={(e)=>setWizardData({...wizardData, mistakes: e.target.value})} className="w-full p-3 rounded-2xl border border-purple-200 bg-white/70" placeholder={t.mistakesLabel} /></div>;
+                    case 4: return <div><label className="block font-bold mb-2">{t.recommendationsLabel}</label><textarea rows="3" value={wizardData.recommendations} onChange={(e)=>setWizardData({...wizardData, recommendations: e.target.value})} className="w-full p-3 rounded-2xl border border-purple-200 bg-white/70" placeholder={t.recommendationsLabel} /></div>;
+                    case 5: return <div><label className="block font-bold mb-2">{t.score} ({wizardData.score})</label><input type="range" min="0" max="10" step="0.5" value={wizardData.score} onChange={(e)=>setWizardData({...wizardData, score: parseFloat(e.target.value)})} className="w-full accent-purple-600" /><div className="text-center text-2xl font-bold text-purple-700">{wizardData.score}</div></div>;
+                    case 6: return <div><label className="block font-bold mb-2">{t.date}</label><input type="date" value={wizardData.date} onChange={(e)=>setWizardData({...wizardData, date: e.target.value})} className="w-full p-3 rounded-2xl border border-purple-200 bg-white/70" /></div>;
+                    default: return null;
+                }
+            };
+            const currentStudent = selectedStudentName ? studentsData[selectedStudentName] : null;
+            const records = currentStudent?.records || [];
+
+            if (showIntro) {
+                return (
+                    <div className="fixed inset-0 flex items-center justify-center bg-gradient-to-br from-indigo-900 to-purple-900 z-50">
+                        <div className="text-center transform transition-all duration-700 scale-105 animate-pulse">
+                            <h1 className="text-5xl md:text-7xl font-extrabold text-white mb-8 drop-shadow-2xl animated-gradient bg-clip-text text-transparent bg-gradient-to-r from-yellow-300 to-pink-400">الميسر للحفظ</h1>
+                            <div className="w-64 h-2 bg-white/30 rounded-full overflow-hidden mx-auto mt-8">
+                                <div className="h-full bg-gradient-to-r from-yellow-400 to-pink-500 rounded-full" style={{ width: `${progressWidth}%`, transition: 'width 0.03s linear' }}></div>
+                            </div>
+                            <p className="text-white/80 mt-4 text-lg">جاري تجهيز التطبيق...</p>
+                        </div>
+                    </div>
+                );
+            }
+
+            return (
+                <div className={`min-h-screen p-4 md:p-6 ${lang === 'ar' ? 'rtl-support' : 'ltr-support'}`} dir={lang === 'ar' ? 'rtl' : 'ltr'}>
+                    <div className="max-w-7xl mx-auto">
+                        {/* header */}
+                        <div className="flex flex-wrap justify-between items-center mb-8 gap-4">
+                            <h1 className="text-3xl md:text-4xl font-black bg-gradient-to-r from-purple-700 to-pink-600 bg-clip-text text-transparent">{t.appName}</h1>
+                            <button onClick={() => setLang(lang === 'ar' ? 'en' : 'ar')} className="px-5 py-2 rounded-full bg-white/50 backdrop-blur border border-purple-300 hover:shadow-lg hover:scale-105 transition-all font-bold">{lang === 'ar' ? 'English' : 'العربية'}</button>
+                        </div>
+                        {/* search & actions */}
+                        <div className="glass-card rounded-3xl p-5 mb-8">
+                            <div className="flex flex-col md:flex-row gap-4">
+                                <input type="text" value={searchTerm} onChange={(e)=>setSearchTerm(e.target.value)} placeholder={t.searchPlaceholder} className="flex-1 p-3 rounded-2xl border border-purple-200 bg-white/70 focus:ring-2 focus:ring-purple-400" />
+                                <button onClick={openWizardForNewStudent} className="btn-ripple px-6 py-3 rounded-2xl bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold shadow-lg hover:shadow-xl">{t.addStudent}</button>
+                                {selectedStudentName && <button onClick={openWizardForAddRecord} className="btn-ripple px-6 py-3 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-bold shadow-lg">{t.addRecordBtn}</button>}
+                            </div>
+                            {searchTerm && (
+                                <div className="mt-5 grid grid-cols-2 md:grid-cols-4 gap-3 animate-fadeIn">
+                                    {getFilteredStudents().map(s => (
+                                        <div key={s.name} onClick={()=>handleSelectStudent(s.name)} className="bg-white/60 p-3 rounded-xl cursor-pointer hover:bg-purple-100 hover:scale-105 transition-all text-center font-semibold shadow-sm">{s.name}</div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                        {/* student details */}
+                        {selectedStudentName && (
+                            <div className="glass-card rounded-3xl p-6 animate-card-slide">
+                                <div className="flex justify-between items-center border-b border-purple-200 pb-3 mb-5">
+                                    <h2 className="text-2xl font-bold text-purple-800">{selectedStudentName}</h2>
+                                    <span className="bg-purple-100 px-3 py-1 rounded-full text-purple-700">{records.length} {t.studentRecords}</span>
+                                </div>
+                                {records.length === 0 ? (
+                                    <div className="text-center py-12 text-gray-500">{t.noRecords}</div>
+                                ) : (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        {records.map(rec => (
+                                            <div key={rec.id} className="bg-white/60 backdrop-blur-sm rounded-2xl p-5 shadow-md hover:shadow-xl transition-all hover:scale-[1.02] border border-purple-100">
+                                                <div className="flex justify-between items-start">
+                                                    <div><span className="text-sm text-purple-600">{t.date}: {rec.date}</span><div className="mt-2 font-bold text-purple-800">{t.score}: {rec.score}/10</div></div>
+                                                    <div className="flex gap-2">
+                                                        <button onClick={()=>openEditRecord(rec)} className="text-blue-600 hover:scale-110">✏️</button>
+                                                        <button onClick={()=>deleteRecord(rec.id)} className="text-red-500 hover:scale-110">🗑️</button>
+                                                    </div>
+                                                </div>
+                                                <div className="mt-3 grid grid-cols-2 gap-2 text-sm bg-purple-50/50 p-3 rounded-xl"><div><span className="font-bold">{t.from}:</span> ج{rec.fromJuz} س{rec.fromSurah} ص{rec.fromPage} آ{rec.fromAyah}</div><div><span className="font-bold">{t.to}:</span> ج{rec.toJuz} س{rec.toSurah} ص{rec.toPage} آ{rec.toAyah}</div></div>
+                                                <div className="mt-2"><span className="font-bold">{t.mistakesLabel}:</span> {rec.mistakes || "—"}</div>
+                                                <div><span className="font-bold">{t.recommendationsLabel}:</span> {rec.recommendations || "—"}</div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                        {!selectedStudentName && <div className="glass-card rounded-3xl p-10 text-center text-gray-500">{t.selectStudent}</div>}
+                    </div>
+                    {/* Wizard Modal */}
+                    {showWizard && (
+                        <div className="fixed inset-0 flex items-center justify-center z-50 modal-backdrop" onClick={()=>setShowWizard(false)}>
+                            <div className="bg-white/95 backdrop-blur-xl rounded-3xl w-full max-w-3xl mx-4 p-6 shadow-2xl transform transition-all scale-100" onClick={(e)=>e.stopPropagation()}>
+                                <div className="flex justify-between items-center border-b pb-3 mb-5"><h3 className="text-2xl font-bold text-purple-700">{wizardMode==='new'?t.addNewStudentTitle:wizardMode==='addRecord'?t.addNewRecordTitle:t.editRecordTitle}</h3><button onClick={()=>setShowWizard(false)} className="text-2xl">✕</button></div>
+                                <div className="mb-6"><div className="flex gap-2 justify-between bg-purple-50 p-2 rounded-full"><span className={`text-sm font-bold px-4 py-1 rounded-full transition-all ${currentStep>=1?'bg-purple-600 text-white':'bg-gray-200'}`}>1 {t.step1}</span><span className={`text-sm font-bold px-4 py-1 rounded-full ${currentStep>=2?'bg-purple-600 text-white':'bg-gray-200'}`}>2 {t.step2}</span><span className={`text-sm font-bold px-4 py-1 rounded-full ${currentStep>=3?'bg-purple-600 text-white':'bg-gray-200'}`}>3 {t.step3}</span><span className={`text-sm font-bold px-4 py-1 rounded-full ${currentStep>=4?'bg-purple-600 text-white':'bg-gray-200'}`}>4 {t.step4}</span><span className={`text-sm font-bold px-4 py-1 rounded-full ${currentStep>=5?'bg-purple-600 text-white':'bg-gray-200'}`}>5 {t.step5}</span><span className={`text-sm font-bold px-4 py-1 rounded-full ${currentStep>=6?'bg-purple-600 text-white':'bg-gray-200'}`}>6 {t.step6}</span></div></div>
+                                <div className="min-h-[300px]">{renderStepContent()}</div>
+                                <div className="flex justify-between mt-8 gap-3">
+                                    {currentStep > 1 && <button onClick={()=>setCurrentStep(currentStep-1)} className="px-6 py-2 rounded-xl bg-gray-200 hover:bg-gray-300">{t.prev}</button>}
+                                    {currentStep < 6 && <button onClick={()=>setCurrentStep(currentStep+1)} className="px-6 py-2 rounded-xl bg-purple-600 text-white hover:bg-purple-700">{t.next}</button>}
+                                    {currentStep === 6 && <button onClick={saveWizard} className="px-8 py-2 rounded-xl bg-gradient-to-r from-green-500 to-emerald-600 text-white font-bold">{t.save}</button>}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+    </script>
 </body>
 </html>
